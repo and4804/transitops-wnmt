@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { useTheme } from "../theme/ThemeContext";
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard" },
@@ -13,6 +14,7 @@ const NAV_ITEMS = [
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   function handleLogout() {
@@ -35,6 +37,9 @@ export default function Layout() {
           </NavLink>
         ))}
         <div style={{ flex: 1 }} />
+        <button className="btn btn-secondary btn-sm" onClick={toggleTheme}>
+          {theme === "dark" ? "☀ Light mode" : "☾ Dark mode"}
+        </button>
         <button className="btn btn-secondary btn-sm" onClick={handleLogout}>
           Log out
         </button>

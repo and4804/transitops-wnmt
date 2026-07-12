@@ -4,8 +4,12 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { requireField, requireNumber } from "../lib/validate";
 import { conflict, notFound, unprocessable } from "../lib/errors";
+import { parseSort, containsFilter } from "../lib/query";
+import { newReportDoc, drawTable } from "../lib/pdf";
 
 const router = Router();
+
+const TRIP_SORT_FIELDS = ["id", "source", "destination", "status", "createdAt", "actualDistanceKm"] as const;
 
 router.use(requireAuth);
 
@@ -56,16 +60,48 @@ router.post(
 router.get(
   "/",
   asyncHandler(async (req, res) => {
-    const { status, vehicleId, driverId } = req.query;
+    const { status, vehicleId, driverId, q } = req.query;
     const trips = await prisma.trip.findMany({
       where: {
         ...(status ? { status: status as any } : {}),
         ...(vehicleId ? { vehicleId: Number(vehicleId) } : {}),
         ...(driverId ? { driverId: Number(driverId) } : {}),
+        ...containsFilter(q, ["source", "destination"]),
       },
-      orderBy: { id: "asc" },
+      orderBy: parseSort(req.query as Record<string, unknown>, TRIP_SORT_FIELDS, "id"),
     });
     res.status(200).json(trips);
+  })
+);
+
+router.get(
+  "/export.pdf",
+  requireRole("FleetManager", "Dispatcher"),
+  asyncHandler(async (_req, res) => {
+    const trips = await prisma.trip.findMany({ orderBy: { id: "asc" } });
+    const doc = newReportDoc(res, "Trip Log Report", "All trips with route, cargo, and status.", "trip-log-report.pdf");
+    drawTable(
+      doc,
+      [
+        { key: "id", header: "#", width: 30, align: "right" },
+        { key: "route", header: "ROUTE", width: 150 },
+        { key: "vehicleId", header: "VEH", width: 40, align: "right" },
+        { key: "driverId", header: "DRV", width: 40, align: "right" },
+        { key: "cargoWeightKg", header: "CARGO (KG)", width: 70, align: "right" },
+        { key: "distanceKm", header: "DIST (KM)", width: 70, align: "right" },
+        { key: "status", header: "STATUS", width: 65 },
+      ],
+      trips.map((t) => ({
+        id: t.id,
+        route: `${t.source} -> ${t.destination}`,
+        vehicleId: t.vehicleId,
+        driverId: t.driverId,
+        cargoWeightKg: t.cargoWeightKg,
+        distanceKm: t.actualDistanceKm ?? t.plannedDistanceKm,
+        status: t.status,
+      }))
+    );
+    doc.end();
   })
 );
 

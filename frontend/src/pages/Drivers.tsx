@@ -1,10 +1,11 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError } from "../api/client";
 import { getDriverSafetyScores } from "../api/ml";
 import type { Driver, DriverSafetyScore, DriverStatus } from "../api/types";
 import Badge from "../components/Badge";
 import RiskBadge from "../components/charts/RiskBadge";
 import SafetyScoreChart from "../components/charts/SafetyScoreChart";
+import SortableHeader, { type SortState } from "../components/SortableHeader";
 import { useAuth } from "../auth/AuthContext";
 
 const STATUSES: DriverStatus[] = ["Available", "OnTrip", "Suspended"];
@@ -30,7 +31,15 @@ export default function Drivers() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [sort, setSort] = useState<SortState>({ sortBy: "id", sortDir: "asc" });
   const [showForm, setShowForm] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
   const [editing, setEditing] = useState<Driver | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
@@ -49,14 +58,18 @@ export default function Drivers() {
   }
 
   function load() {
-    const params = statusFilter ? `?status=${statusFilter}` : "";
+    const params = new URLSearchParams();
+    if (statusFilter) params.set("status", statusFilter);
+    if (search) params.set("q", search);
+    params.set("sortBy", sort.sortBy);
+    params.set("sortDir", sort.sortDir);
     api
-      .get<Driver[]>(`/drivers${params}`)
+      .get<Driver[]>(`/drivers?${params.toString()}`)
       .then(setDrivers)
       .catch((err) => setError(err instanceof ApiError ? err.message : "Failed to load drivers"));
   }
 
-  useEffect(load, [statusFilter]);
+  useEffect(load, [statusFilter, search, sort]);
 
   function openCreate() {
     setEditing(null);
@@ -124,6 +137,7 @@ export default function Drivers() {
       {canManage && safetyError && <div className="error-banner">{safetyError}</div>}
       {canManage && safetyScores.length > 0 && <SafetyScoreChart data={safetyScores} />}
       <div className="filters-row">
+        <input placeholder="Search name, license no.…" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
           {STATUSES.map((s) => (
@@ -140,13 +154,13 @@ export default function Drivers() {
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>License No.</th>
+                <SortableHeader field="name" label="Name" sort={sort} onChange={setSort} />
+                <SortableHeader field="licenseNumber" label="License No." sort={sort} onChange={setSort} />
                 <th>Category</th>
-                <th>Expiry</th>
+                <SortableHeader field="licenseExpiry" label="Expiry" sort={sort} onChange={setSort} />
                 <th>Contact</th>
-                <th>Safety Score</th>
-                <th>Status</th>
+                <SortableHeader field="safetyScore" label="Safety Score" sort={sort} onChange={setSort} />
+                <SortableHeader field="status" label="Status" sort={sort} onChange={setSort} />
                 {canManage && <th></th>}
               </tr>
             </thead>

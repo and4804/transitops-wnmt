@@ -55,6 +55,15 @@ enum ExpenseType {
   Other
 }
 
+enum VehicleDocumentType {
+  Insurance
+  Registration
+  Permit
+  PUC
+  Fitness
+  Other
+}
+
 model User {
   id                    Int       @id @default(autoincrement())
   name                  String
@@ -84,6 +93,7 @@ model Vehicle {
   maintenanceRecords Maintenance[]
   fuelLogs           FuelLog[]
   expenses           Expense[]
+  documents          VehicleDocument[]
 }
 
 model Driver {
@@ -156,4 +166,17 @@ model Expense {
   description String?
 
   vehicle     Vehicle     @relation(fields: [vehicleId], references: [id])
+}
+
+model VehicleDocument {
+  id             Int                 @id @default(autoincrement())
+  vehicleId      Int
+  type           VehicleDocumentType
+  fileName       String
+  filePath       String
+  expiryDate     DateTime?
+  uploadedAt     DateTime            @default(now())
+  uploadedById   Int?
+
+  vehicle        Vehicle             @relation(fields: [vehicleId], references: [id])
 }

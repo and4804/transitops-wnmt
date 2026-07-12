@@ -1,7 +1,8 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError } from "../api/client";
 import type { Maintenance as MaintenanceRecord, Vehicle } from "../api/types";
 import Badge from "../components/Badge";
+import SortableHeader, { type SortState } from "../components/SortableHeader";
 import { useAuth } from "../auth/AuthContext";
 
 const emptyForm = { vehicleId: "", description: "", cost: "" };
@@ -12,18 +13,30 @@ export default function Maintenance() {
   const [records, setRecords] = useState<MaintenanceRecord[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [sort, setSort] = useState<SortState>({ sortBy: "id", sortDir: "asc" });
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   function load() {
+    const params = new URLSearchParams();
+    if (search) params.set("q", search);
+    params.set("sortBy", sort.sortBy);
+    params.set("sortDir", sort.sortDir);
     api
-      .get<MaintenanceRecord[]>("/maintenance")
+      .get<MaintenanceRecord[]>(`/maintenance?${params.toString()}`)
       .then(setRecords)
       .catch((err) => setError(err instanceof ApiError ? err.message : "Failed to load maintenance records"));
   }
 
-  useEffect(load, []);
+  useEffect(load, [search, sort]);
 
   function openCreate() {
     setFormError(null);
@@ -73,6 +86,9 @@ export default function Maintenance() {
         )}
       </div>
       {error && <div className="error-banner">{error}</div>}
+      <div className="filters-row">
+        <input placeholder="Search description…" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
+      </div>
       <div className="card">
         {records.length === 0 ? (
           <div className="empty-state">No maintenance records.</div>
@@ -80,12 +96,12 @@ export default function Maintenance() {
           <table>
             <thead>
               <tr>
-                <th>#</th>
+                <SortableHeader field="id" label="#" sort={sort} onChange={setSort} />
                 <th>Vehicle</th>
                 <th>Description</th>
-                <th>Cost</th>
-                <th>Status</th>
-                <th>Opened</th>
+                <SortableHeader field="cost" label="Cost" sort={sort} onChange={setSort} />
+                <SortableHeader field="status" label="Status" sort={sort} onChange={setSort} />
+                <SortableHeader field="createdAt" label="Opened" sort={sort} onChange={setSort} />
                 {canManage && <th></th>}
               </tr>
             </thead>

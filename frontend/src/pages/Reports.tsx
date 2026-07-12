@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
 import { getCostRoiForecast } from "../api/ml";
+import { downloadFile } from "../api/download";
 import ForecastChart, { type ForecastPoint } from "../components/charts/ForecastChart";
+import CostBreakdownChart from "../components/charts/CostBreakdownChart";
 import type { CostRoiForecast, Vehicle } from "../api/types";
 
 interface FuelEfficiencyRow {
@@ -36,6 +38,13 @@ interface RoiRow {
 
 const TABS = ["Fuel Efficiency", "Utilization", "Operational Cost", "ROI"] as const;
 type Tab = (typeof TABS)[number];
+
+const TAB_TO_REPORT_TYPE: Record<Tab, string> = {
+  "Fuel Efficiency": "fuel-efficiency",
+  Utilization: "utilization",
+  "Operational Cost": "operational-cost",
+  ROI: "roi",
+};
 
 function buildForecastSeries(
   history: { label: string; value: number | null }[],
@@ -101,28 +110,28 @@ export default function Reports() {
   }, [tab]);
 
   function downloadCsv() {
-    const token = localStorage.getItem("transitops_token");
-    const base = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
-    fetch(`${base}/reports/export.csv`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.blob())
-      .then((blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "trips-export.csv";
-        a.click();
-        URL.revokeObjectURL(url);
-      })
-      .catch(() => setError("Failed to export CSV"));
+    downloadFile("/reports/export.csv", "trips-export.csv").catch(() => setError("Failed to export CSV"));
+  }
+
+  function downloadPdf() {
+    const type = TAB_TO_REPORT_TYPE[tab];
+    downloadFile(`/reports/export.pdf?type=${type}`, `${type}-report.pdf`).catch(() =>
+      setError("Failed to export PDF")
+    );
   }
 
   return (
     <>
       <div className="page-header">
         <h2>Reports & Analytics</h2>
-        <button className="btn btn-secondary" onClick={downloadCsv}>
-          Export Trips CSV
-        </button>
+        <div className="actions-row">
+          <button className="btn btn-secondary" onClick={downloadPdf}>
+            Export PDF
+          </button>
+          <button className="btn btn-secondary" onClick={downloadCsv}>
+            Export Trips CSV
+          </button>
+        </div>
       </div>
       {error && <div className="error-banner">{error}</div>}
       <div className="filters-row">
@@ -181,6 +190,8 @@ export default function Reports() {
             ))}
         </>
       )}
+
+      {tab === "Operational Cost" && cost && cost.length > 0 && <CostBreakdownChart data={cost} />}
 
       <div className="card">
         {tab === "Fuel Efficiency" &&

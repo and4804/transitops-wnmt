@@ -4,10 +4,12 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { requireField, requireNumber, requireEnum } from "../lib/validate";
 import { conflict, notFound } from "../lib/errors";
+import { parseSort, containsFilter } from "../lib/query";
 
 const router = Router();
 
 const DRIVER_STATUSES = ["Available", "OnTrip", "Suspended"] as const;
+const DRIVER_SORT_FIELDS = ["id", "name", "licenseNumber", "licenseExpiry", "safetyScore", "status"] as const;
 
 router.use(requireAuth);
 
@@ -42,10 +44,13 @@ router.post(
 router.get(
   "/",
   asyncHandler(async (req, res) => {
-    const { status } = req.query;
+    const { status, q } = req.query;
     const drivers = await prisma.driver.findMany({
-      where: status ? { status: status as any } : {},
-      orderBy: { id: "asc" },
+      where: {
+        ...(status ? { status: status as any } : {}),
+        ...containsFilter(q, ["name", "licenseNumber"]),
+      },
+      orderBy: parseSort(req.query as Record<string, unknown>, DRIVER_SORT_FIELDS, "id"),
     });
     res.status(200).json(drivers);
   })

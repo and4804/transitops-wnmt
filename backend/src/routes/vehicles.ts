@@ -4,8 +4,12 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { requireField, requireNumber, requireEnum, optionalString } from "../lib/validate";
 import { conflict, notFound } from "../lib/errors";
+import { parseSort, containsFilter } from "../lib/query";
+import { newReportDoc, drawTable } from "../lib/pdf";
 
 const router = Router();
+
+const VEHICLE_SORT_FIELDS = ["id", "regNumber", "name", "type", "odometerKm", "status", "region"] as const;
 
 const VEHICLE_TYPES = ["Van", "Truck", "Mini", "Bus", "Other"] as const;
 const VEHICLE_STATUSES = ["Available", "OnTrip", "InShop", "Retired"] as const;
@@ -39,16 +43,48 @@ router.post(
 router.get(
   "/",
   asyncHandler(async (req, res) => {
-    const { type, status, region } = req.query;
+    const { type, status, region, q } = req.query;
     const vehicles = await prisma.vehicle.findMany({
       where: {
         ...(type ? { type: type as any } : {}),
         ...(status ? { status: status as any } : {}),
         ...(region ? { region: region as any } : {}),
+        ...containsFilter(q, ["regNumber", "name", "model"]),
       },
-      orderBy: { id: "asc" },
+      orderBy: parseSort(req.query as Record<string, unknown>, VEHICLE_SORT_FIELDS, "id"),
     });
     res.status(200).json(vehicles);
+  })
+);
+
+router.get(
+  "/export.pdf",
+  requireRole("FleetManager"),
+  asyncHandler(async (_req, res) => {
+    const vehicles = await prisma.vehicle.findMany({ orderBy: { id: "asc" } });
+    const doc = newReportDoc(res, "Vehicle Registry Report", "Full fleet listing with status and specifications.", "vehicle-registry-report.pdf");
+    drawTable(
+      doc,
+      [
+        { key: "regNumber", header: "REG NO.", width: 80 },
+        { key: "name", header: "NAME", width: 90 },
+        { key: "type", header: "TYPE", width: 60 },
+        { key: "maxLoadCapacityKg", header: "CAPACITY (KG)", width: 90, align: "right" },
+        { key: "odometerKm", header: "ODOMETER (KM)", width: 90, align: "right" },
+        { key: "region", header: "REGION", width: 70 },
+        { key: "status", header: "STATUS", width: 55 },
+      ],
+      vehicles.map((v) => ({
+        regNumber: v.regNumber,
+        name: v.name,
+        type: v.type,
+        maxLoadCapacityKg: v.maxLoadCapacityKg,
+        odometerKm: v.odometerKm,
+        region: v.region ?? "—",
+        status: v.status,
+      }))
+    );
+    doc.end();
   })
 );
 
