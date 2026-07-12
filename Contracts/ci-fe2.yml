@@ -1,0 +1,65 @@
+name: FE-2 Component Tests — Drivers, Trip List, Fuel & Expense, Reports
+
+on:
+  pull_request:
+    paths:
+      - 'apps/ops-analyst-ui/**'
+      - 'contracts/fe2/**'
+  push:
+    branches: [main]
+
+env:
+  SPECMATIC_VERSION: '2.34.1'
+  STUB_URL: http://localhost:9000
+  CONTRACT_REPO_URL: https://github.com/transitops/central-contract-repo.git
+
+jobs:
+  component-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: apps/ops-analyst-ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/ops-analyst-ui
+        run: npm ci
+
+      - name: Run unit tests
+        working-directory: apps/ops-analyst-ui
+        run: npm run test:unit
+
+      - name: Set up JDK (Specmatic runtime)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download Specmatic
+        run: |
+          curl -L -o specmatic.jar \
+            "https://github.com/specmatic/specmatic/releases/download/${SPECMATIC_VERSION}/specmatic.jar"
+
+      - name: Start Specmatic stub (both contracts)
+        working-directory: contracts/fe2
+        run: |
+          java -jar ../../specmatic.jar stub --config specmatic.json --port 9000 &
+          npx wait-on ${STUB_URL}/drivers --timeout 30000
+
+      - name: Run component tests against the stub
+        working-directory: apps/ops-analyst-ui
+        env:
+          API_BASE_URL: ${{ env.STUB_URL }}
+        run: npm run test:component
+
+      - name: Upload Specmatic stub logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fe2-stub-logs
+          path: contracts/fe2/logs/

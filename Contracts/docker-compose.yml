@@ -1,0 +1,35 @@
+version: "3.9"
+
+# Dockerized Postgres for local contract-test/dev work.
+# BE-1 and BE-2 are separate services (see CONTRACT_GUIDE.md assumption #5),
+# so each gets its own database instance rather than a shared one.
+services:
+  postgres-be1:
+    image: postgres:16-alpine
+    container_name: transitops-be1-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: be1
+      POSTGRES_PASSWORD: be1
+      POSTGRES_DB: fleet_trips
+    ports:
+      - "5433:5432"
+    volumes:
+      - be1_pgdata:/var/lib/postgresql/data
+
+  postgres-be2:
+    image: postgres:16-alpine
+    container_name: transitops-be2-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: be2
+      POSTGRES_PASSWORD: be2
+      POSTGRES_DB: people_finance
+    ports:
+      - "5434:5432"
+    volumes:
+      - be2_pgdata:/var/lib/postgresql/data
+
+volumes:
+  be1_pgdata:
+  be2_pgdata:
