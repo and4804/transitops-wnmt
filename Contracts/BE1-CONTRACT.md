@@ -97,13 +97,41 @@ See `ci-be1.yml` in this folder — copy it to
 
 ---
 
-## 5. Local dev loop
+## 5. Database
+
+Postgres, dockerized — no local Postgres install required. Connection
+details:
 
 ```bash
-# Terminal 1 — your app
+# from contracts/ (one level up from this file)
+docker compose up -d postgres-be1
+```
+
+| Setting | Value |
+|---|---|
+| Host | `localhost` |
+| Port | `5433` |
+| Database | `fleet_trips` |
+| User / Password | `be1` / `be1` |
+| Connection string | `postgresql://be1:be1@localhost:5433/fleet_trips` |
+
+Point your app's DB config at this connection string. `docker-compose.yml`
+persists data in the `be1_pgdata` volume, so `docker compose down` alone
+won't wipe it — add `-v` if you need a clean slate.
+
+---
+
+## 6. Local dev loop
+
+```bash
+# Terminal 1 — Postgres
+cd contracts
+docker compose up -d postgres-be1
+
+# Terminal 2 — your app
 npm run dev   # or your stack's start command, listening on :8081
 
-# Terminal 2 — contract tests, re-run on every change
+# Terminal 3 — contract tests, re-run on every change
 cd contracts/be1
 specmatic test --config specmatic.json
 ```

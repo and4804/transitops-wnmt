@@ -82,12 +82,41 @@ component tests → fail + upload report on any mismatch.
 
 ---
 
-## 5. Local dev loop
+## 5. Database
+
+Postgres, dockerized — no local Postgres install required. Connection
+details:
 
 ```bash
+# from contracts/ (one level up from this file)
+docker compose up -d postgres-be2
+```
+
+| Setting | Value |
+|---|---|
+| Host | `localhost` |
+| Port | `5434` |
+| Database | `people_finance` |
+| User / Password | `be2` / `be2` |
+| Connection string | `postgresql://be2:be2@localhost:5434/people_finance` |
+
+Point your app's DB config at this connection string. `docker-compose.yml`
+persists data in the `be2_pgdata` volume, so `docker compose down` alone
+won't wipe it — add `-v` if you need a clean slate.
+
+---
+
+## 6. Local dev loop
+
+```bash
+# Terminal 1 — Postgres
+cd contracts
+docker compose up -d postgres-be2
+
+# Terminal 2 — your app
 npm run dev   # your app, listening on :8082
 
-# separate terminal, re-run on every change
+# Terminal 3 — contract tests, re-run on every change
 cd contracts/be2
 specmatic test --config specmatic.json
 ```

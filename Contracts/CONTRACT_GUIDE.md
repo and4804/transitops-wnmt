@@ -49,10 +49,15 @@ one pass before build starts:
    0%/null — that's expected per the module doc's own guidance to mark ROI
    as a mocked/stretch metric in the demo, not a bug to chase.
 5. **Cross-contract read in `GET /vehicles/{id}/cost-summary`.** This lives
-   in BE-2's contract but sums BE-1-owned Maintenance costs. If BE-1 and
-   BE-2 are separate services with separate databases, this needs an
-   internal call from BE-2 to BE-1's Maintenance data (or a shared DB
-   read) — flagged so it isn't discovered at Hour 6 integration.
+   in BE-2's contract but sums BE-1-owned Maintenance costs. BE-1 and BE-2
+   run as separate services, each with its own dockerized Postgres
+   instance (see `docker-compose.yml`), so this needs an internal call
+   from BE-2 to BE-1's Maintenance data rather than a shared DB read —
+   flagged so it isn't discovered at Hour 6 integration.
+6. **Database engine.** Both services use Postgres, run via Docker for
+   local dev (`docker-compose.yml` in this folder — `postgres-be1` on
+   `:5433`, `postgres-be2` on `:5434`). See each role's `CONTRACT.md`
+   "Database" section for connection strings.
 
 ---
 
@@ -167,6 +172,7 @@ contracts/
 ├── be1-fleet-trips-contract.yaml       # BE-1's contract (source of truth)
 ├── be2-people-finance-contract.yaml    # BE-2's contract (source of truth)
 ├── CONTRACT_GUIDE.md                   # this file — shared reference
+├── docker-compose.yml                  # dockerized Postgres for BE-1/BE-2 (:5433/:5434)
 ├── be1/
 │   ├── specmatic.json                  # provider config (test mode)
 │   ├── CONTRACT.md                     # must-pass checklist, generative test estimate
