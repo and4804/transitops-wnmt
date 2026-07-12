@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: transitops-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: transitops
+      POSTGRES_PASSWORD: transitops
+      POSTGRES_DB: transitops
+    ports:
+      - "5432:5432"
+    volumes:
+      - transitops_pgdata:/var/lib/postgresql/data
+
+volumes:
+  transitops_pgdata:
