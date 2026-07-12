@@ -24,15 +24,25 @@ echo "==> Installing Node.js 20 (NodeSource)"
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
+if ! command -v npm >/dev/null 2>&1; then
+  echo "==> npm missing after nodejs install (NodeSource repo likely doesn't"
+  echo "    cover this Ubuntu release yet, so apt fell back to Ubuntu's own"
+  echo "    nodejs package, which ships without npm) — installing npm separately"
+  sudo apt-get install -y npm
+fi
+
 echo "==> Installing rsync + nginx"
 sudo apt-get install -y rsync nginx
 
-echo "==> Installing Docker (for Postgres / ml-service later)"
-if ! command -v docker >/dev/null 2>&1; then
-  curl -fsSL https://get.docker.com | sudo sh
-  sudo usermod -aG docker "$USER"
+echo "==> Installing Docker (native Ubuntu packages — avoids Docker's"
+echo "    upstream repo lagging behind brand-new Ubuntu releases)"
+sudo apt-get install -y docker.io
+if apt-cache show docker-compose-v2 >/dev/null 2>&1; then
+  sudo apt-get install -y docker-compose-v2
+else
+  sudo apt-get install -y docker-compose
 fi
-sudo apt-get install -y docker-compose-plugin
+sudo usermod -aG docker "$USER"
 
 echo "==> Creating deploy directory: $DEPLOY_PATH"
 mkdir -p "$DEPLOY_PATH"
@@ -53,17 +63,26 @@ sudo mkdir -p /etc/nginx/ssl
   echo "real_ip_recursive on;"
 } | sudo tee /etc/nginx/conf.d/cloudflare-realip.conf > /dev/null
 
+echo "==> Resolving npm binary path"
+NPM_BIN="$(command -v npm || true)"
+if [ -z "$NPM_BIN" ]; then
+  echo "ERROR: npm not found on PATH after Node.js install"
+  exit 1
+fi
+echo "    npm resolved to: $NPM_BIN"
+
 echo "==> Installing user-level systemd service"
 mkdir -p "$HOME/.config/systemd/user"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$SCRIPT_DIR/transitops.service" ]; then
-  cp "$SCRIPT_DIR/transitops.service" "$HOME/.config/systemd/user/${SERVICE_NAME}.service"
+  SERVICE_SRC="$SCRIPT_DIR/transitops.service"
 elif [ -f "$HOME/transitops.service" ]; then
-  cp "$HOME/transitops.service" "$HOME/.config/systemd/user/${SERVICE_NAME}.service"
+  SERVICE_SRC="$HOME/transitops.service"
 else
   echo "ERROR: transitops.service not found next to this script or in \$HOME"
   exit 1
 fi
+sed "s#__NPM_BIN__#${NPM_BIN}#" "$SERVICE_SRC" > "$HOME/.config/systemd/user/${SERVICE_NAME}.service"
 
 systemctl --user daemon-reload
 systemctl --user enable "$SERVICE_NAME"
