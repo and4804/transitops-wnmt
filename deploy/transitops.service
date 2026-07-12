@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/transitops
+WorkingDirectory=%h/transitops/backend
 ExecStart=__NPM_BIN__ start
 Restart=on-failure
 RestartSec=5

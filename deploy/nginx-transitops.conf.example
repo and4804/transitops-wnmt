@@ -48,7 +48,13 @@ server {
     ssl_certificate     /etc/nginx/ssl/cloudflare-origin.pem;
     ssl_certificate_key /etc/nginx/ssl/cloudflare-origin.key;
 
-    location / {
+    # Frontend static build (Vite). Update if the deploy path changes.
+    root /home/ubuntu/transitops/frontend/dist;
+    index index.html;
+
+    # Backend (Express) route prefixes — see backend/src/index.ts. Keep this
+    # list in sync when new top-level routers are mounted there.
+    location ~ ^/(health|auth|vehicles|drivers|trips|maintenance|dashboard|reports|ml|fuel-logs|expenses) {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -57,5 +63,10 @@ server {
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+    }
+
+    # SPA fallback — client-side routing.
+    location / {
+        try_files $uri $uri/ /index.html;
     }
 }

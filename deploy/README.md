@@ -213,38 +213,88 @@ unless you regenerate it manually in the dashboard.
 
 ---
 
-## 5. How CI behaves while the app is incomplete
+## 5. App layout & how CI deploys it
 
-On every push to `main` (or manual **Actions → Deploy to EC2 → Run workflow**):
+Monorepo, three pieces:
 
-1. Checkout  
-2. Root `npm ci` / build / test — **skipped** if no root `package.json`  
-3. `rsync` → `/home/ubuntu/transitops` (excludes `.git`, `.env`, `node_modules`, pems)  
-4. Restart `systemctl --user transitops` (tolerates failure until `npm start` exists)
+| Piece | Runs as | Port |
+| --- | --- | --- |
+| `backend/` (Express + TS + Prisma) | user systemd unit `transitops` (`npm start` → `node dist/index.js`) | 8080 |
+| `frontend/` (Vite + React) | static files, served directly by Nginx from `frontend/dist` | — |
+| `ml-service/` (Python/FastAPI) | Docker container, via root `docker-compose.yml` | 8000 |
+| Postgres | Docker container, via root `docker-compose.yml` | 5432 |
 
-Gradual rollout idea:
+On every push to `main` (or manual **Actions → Deploy to EC2 → Run workflow**),
+[.github/workflows/deploy.yml](../.github/workflows/deploy.yml):
 
-1. Deploy plumbing only (this folder + workflow) — verify Actions green + files appear under `~/transitops`  
-2. Add `backend/` when ready; either a root `package.json` that starts the API, or extend the workflow/systemd unit for `backend/`  
-3. Add Postgres via `docker compose` on the box  
-4. Add frontend build + Nginx static / reverse proxy rules  
-5. Add `ml-service` later  
+1. `rsync --delete` → `/home/ubuntu/transitops` (excludes `.git`, `.env`,
+   `node_modules`, `dist`, `*.pem` — `dist`/`node_modules` are excluded from
+   deletion too, so the previous build keeps serving until the new one
+   finishes rather than 404ing mid-deploy)
+2. `sudo docker compose up -d --build` — (re)builds `ml-service` if it
+   changed, ensures Postgres is running
+3. `backend/`: `npm ci && npx prisma generate && npx prisma migrate deploy
+   && npm run build`, then `systemctl --user restart transitops`
+4. `frontend/`: `npm ci && VITE_API_BASE_URL=https://transitops.nrg.it.com
+   npm run build` (bakes the production API origin into the static bundle)
+
+**`backend/.env` is never touched by CI** (rsync excludes it) — it must
+exist on the box already, or the service will crash-loop with
+`ENOENT ... package.json`-style or `.env` errors. One-time creation:
+
+```bash
+ssh -i wnmr.pem ubuntu@ec2-3-109-155-36.ap-south-1.compute.amazonaws.com bash -s <<'EOF'
+JWT=$(openssl rand -hex 32)
+cat > ~/transitops/backend/.env <<ENV
+DATABASE_URL=postgresql://transitops:transitops@localhost:5432/transitops
+JWT_SECRET=$JWT
+PORT=8080
+ML_SERVICE_URL=http://localhost:8000
+GOOGLE_CLIENT_ID=
+ENV
+EOF
+```
+
+Fill in `GOOGLE_CLIENT_ID` (and the frontend's matching
+`VITE_GOOGLE_CLIENT_ID` at build time) once "Sign in with Google" needs to
+work — until then that feature is just inactive, everything else runs fine.
+
+Nginx routes by path: known backend route prefixes (`/health`, `/auth`,
+`/vehicles`, `/drivers`, `/trips`, `/maintenance`, `/dashboard`,
+`/reports`, `/ml`, `/fuel-logs`, `/expenses` — see
+`backend/src/index.ts`) proxy to `127.0.0.1:8080`; everything else serves
+`frontend/dist` with SPA fallback to `index.html`. **Update the regex in
+[deploy/nginx-transitops.conf.example](nginx-transitops.conf.example) (and
+re-deploy it) whenever a new top-level router is mounted in the backend.**
+
+**Known gotcha:** Nginx runs as `www-data`, which can't traverse
+`/home/ubuntu` by default (`drwxr-x---`). `setup-ec2.sh` now runs
+`chmod o+x "$HOME"` (traverse-only — doesn't expose directory listings or
+files with their own restrictive permissions, e.g. `.ssh`) so this is
+handled automatically on fresh instances. If you bootstrapped before this
+was added and the frontend 500s with `Permission denied` on `stat()` in
+`/var/log/nginx/error.log`, run it by hand once: `sudo chmod o+x /home/ubuntu`.
 
 ---
 
 ## 6. Checklist (do in order)
 
-- [ ] Security group: 22 / 80 / 443  
-- [ ] Elastic IP attached (optional but strongly recommended)  
-- [ ] Confirm `ssh -i wnmr.pem ubuntu@…` works  
-- [ ] GitHub secrets `EC2_HOST` + `EC2_SSH_KEY` (= full `wnmr.pem`)  
-- [ ] Run `setup-ec2.sh` on the instance; re-login for Docker group  
-- [ ] Cloudflare DNS `A` record `transitops` → Elastic IP, **Proxied** (orange cloud)  
-- [ ] Cloudflare SSL/TLS mode set to **Full (strict)**  
-- [ ] Cloudflare Origin CA cert generated + copied to `/etc/nginx/ssl/` on the instance  
-- [ ] Nginx site installed (`nginx -t` passes, reloaded)  
-- [ ] Push only deploy scaffolding to `main`; confirm Actions succeeds  
-- [ ] Later: app packages, `.env` on the server, compose up Postgres  
+- [x] Security group: 22 / 80 / 443
+- [ ] Elastic IP attached (optional but strongly recommended — DNS breaks
+      on stop/start otherwise)
+- [x] Confirm `ssh -i wnmr.pem ubuntu@…` works
+- [x] GitHub secrets `EC2_HOST` + `EC2_SSH_KEY` (= full `wnmr.pem`)
+- [x] Run `setup-ec2.sh` on the instance; re-login for Docker group
+- [x] Cloudflare DNS `A` record `transitops` → instance IP, **Proxied** (orange cloud)
+- [x] Cloudflare SSL/TLS mode set to **Full (strict)**
+- [x] Cloudflare Origin CA cert generated + copied to `/etc/nginx/ssl/` on the instance
+- [x] Nginx site installed (`nginx -t` passes, reloaded), serving frontend + proxying backend
+- [x] `sudo chmod o+x /home/ubuntu` applied (see gotcha above)
+- [x] `backend/.env` created by hand on the instance
+- [x] `docker compose up -d --build` (Postgres + ml-service running)
+- [x] Backend built + migrated + running under systemd
+- [x] Frontend built with production `VITE_API_BASE_URL`
+- [ ] Confirm `git push` to `main` triggers Actions and redeploys cleanly end-to-end
 
 ---
 
