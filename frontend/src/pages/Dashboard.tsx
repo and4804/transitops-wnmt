@@ -3,6 +3,7 @@ import { api, ApiError } from "../api/client";
 import { getUtilizationForecast } from "../api/ml";
 import type { DashboardKpis, UtilizationForecast } from "../api/types";
 import ForecastChart, { type ForecastPoint } from "../components/charts/ForecastChart";
+import StatusPieChart from "../components/charts/StatusPieChart";
 
 const KPI_LABELS: { key: keyof DashboardKpis; label: string; suffix?: string }[] = [
   { key: "activeVehicles", label: "Active Vehicles" },
@@ -68,6 +69,16 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
+      )}
+      {kpis && (
+        <StatusPieChart
+          title="Vehicle Status Distribution"
+          data={[
+            { name: "Available", value: kpis.availableVehicles },
+            { name: "InShop", value: kpis.inShopVehicles },
+            { name: "OnTrip", value: Math.max(0, kpis.activeVehicles - kpis.availableVehicles - kpis.inShopVehicles) },
+          ]}
+        />
       )}
       {utilError && <div className="error-banner">{utilError}</div>}
       {utilPoints.length > 0 && (

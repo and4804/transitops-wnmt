@@ -186,3 +186,18 @@ export interface UtilizationForecast {
   history: UtilizationHistoryPoint[];
   forecast: UtilizationForecastPoint[];
 }
+
+export type VehicleDocumentType = "Insurance" | "Registration" | "Permit" | "PUC" | "Fitness" | "Other";
+
+export interface VehicleDocument {
+  id: number;
+  vehicleId: number;
+  type: VehicleDocumentType;
+  fileName: string;
+  filePath: string;
+  expiryDate: string | null;
+  uploadedAt: string;
+  uploadedById: number | null;
+  expired: boolean;
+  expiringSoon: boolean;
+}

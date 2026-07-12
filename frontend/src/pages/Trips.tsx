@@ -1,7 +1,9 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError } from "../api/client";
+import { downloadFile } from "../api/download";
 import type { Driver, Trip, TripStatus, Vehicle } from "../api/types";
 import Badge from "../components/Badge";
+import SortableHeader, { type SortState } from "../components/SortableHeader";
 import { useAuth } from "../auth/AuthContext";
 
 const STATUSES: TripStatus[] = ["Draft", "Dispatched", "Completed", "Cancelled"];
@@ -22,7 +24,15 @@ export default function Trips() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [sort, setSort] = useState<SortState>({ sortBy: "id", sortDir: "asc" });
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
@@ -31,14 +41,22 @@ export default function Trips() {
   const [completeError, setCompleteError] = useState<string | null>(null);
 
   function load() {
-    const params = statusFilter ? `?status=${statusFilter}` : "";
+    const params = new URLSearchParams();
+    if (statusFilter) params.set("status", statusFilter);
+    if (search) params.set("q", search);
+    params.set("sortBy", sort.sortBy);
+    params.set("sortDir", sort.sortDir);
     api
-      .get<Trip[]>(`/trips${params}`)
+      .get<Trip[]>(`/trips?${params.toString()}`)
       .then(setTrips)
       .catch((err) => setError(err instanceof ApiError ? err.message : "Failed to load trips"));
   }
 
-  useEffect(load, [statusFilter]);
+  useEffect(load, [statusFilter, search, sort]);
+
+  function downloadPdf() {
+    downloadFile("/trips/export.pdf", "trip-log-report.pdf").catch(() => setError("Failed to export PDF"));
+  }
 
   function openCreate() {
     setFormError(null);
@@ -116,14 +134,20 @@ export default function Trips() {
     <>
       <div className="page-header">
         <h2>Trips</h2>
-        {canManage && (
-          <button className="btn" onClick={openCreate}>
-            + Create Trip
+        <div className="actions-row">
+          <button className="btn btn-secondary" onClick={downloadPdf}>
+            Export PDF
           </button>
-        )}
+          {canManage && (
+            <button className="btn" onClick={openCreate}>
+              + Create Trip
+            </button>
+          )}
+        </div>
       </div>
       {error && <div className="error-banner">{error}</div>}
       <div className="filters-row">
+        <input placeholder="Search source, destination…" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
           {STATUSES.map((s) => (
@@ -140,13 +164,13 @@ export default function Trips() {
           <table>
             <thead>
               <tr>
-                <th>#</th>
-                <th>Route</th>
+                <SortableHeader field="id" label="#" sort={sort} onChange={setSort} />
+                <SortableHeader field="source" label="Route" sort={sort} onChange={setSort} />
                 <th>Vehicle</th>
                 <th>Driver</th>
                 <th>Cargo (kg)</th>
-                <th>Distance (km)</th>
-                <th>Status</th>
+                <SortableHeader field="actualDistanceKm" label="Distance (km)" sort={sort} onChange={setSort} />
+                <SortableHeader field="status" label="Status" sort={sort} onChange={setSort} />
                 {canManage && <th></th>}
               </tr>
             </thead>

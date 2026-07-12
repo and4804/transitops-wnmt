@@ -4,8 +4,11 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { requireField, requireNumber } from "../lib/validate";
 import { conflict, notFound } from "../lib/errors";
+import { parseSort, containsFilter } from "../lib/query";
 
 const router = Router();
+
+const MAINTENANCE_SORT_FIELDS = ["id", "cost", "status", "createdAt"] as const;
 
 router.use(requireAuth);
 
@@ -38,10 +41,14 @@ router.post(
 router.get(
   "/",
   asyncHandler(async (req, res) => {
-    const { vehicleId } = req.query;
+    const { vehicleId, q, status } = req.query;
     const records = await prisma.maintenance.findMany({
-      where: vehicleId ? { vehicleId: Number(vehicleId) } : {},
-      orderBy: { id: "asc" },
+      where: {
+        ...(vehicleId ? { vehicleId: Number(vehicleId) } : {}),
+        ...(status ? { status: status as any } : {}),
+        ...containsFilter(q, ["description"]),
+      },
+      orderBy: parseSort(req.query as Record<string, unknown>, MAINTENANCE_SORT_FIELDS, "id"),
     });
     res.status(200).json(records);
   })

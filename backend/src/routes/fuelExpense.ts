@@ -4,8 +4,11 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { requireField, requireNumber, requireEnum } from "../lib/validate";
 import { notFound } from "../lib/errors";
+import { parseSort } from "../lib/query";
 
 const EXPENSE_TYPES = ["Toll", "Parking", "Fine", "Insurance", "Other"] as const;
+const FUEL_LOG_SORT_FIELDS = ["id", "date", "liters", "cost"] as const;
+const EXPENSE_SORT_FIELDS = ["id", "date", "amount", "type"] as const;
 
 export const fuelLogsRouter = Router();
 fuelLogsRouter.use(requireAuth);
@@ -36,7 +39,7 @@ fuelLogsRouter.get(
     const { vehicleId } = req.query;
     const logs = await prisma.fuelLog.findMany({
       where: vehicleId ? { vehicleId: Number(vehicleId) } : {},
-      orderBy: { id: "asc" },
+      orderBy: parseSort(req.query as Record<string, unknown>, FUEL_LOG_SORT_FIELDS, "id"),
     });
     res.status(200).json(logs);
   })
@@ -71,7 +74,7 @@ expensesRouter.get(
     const { vehicleId } = req.query;
     const expenses = await prisma.expense.findMany({
       where: vehicleId ? { vehicleId: Number(vehicleId) } : {},
-      orderBy: { id: "asc" },
+      orderBy: parseSort(req.query as Record<string, unknown>, EXPENSE_SORT_FIELDS, "id"),
     });
     res.status(200).json(expenses);
   })

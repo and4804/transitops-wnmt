@@ -1,10 +1,13 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError } from "../api/client";
 import { getMaintenanceRisk } from "../api/ml";
+import { downloadFile } from "../api/download";
 import type { MaintenanceRisk, Vehicle, VehicleStatus, VehicleType } from "../api/types";
 import Badge from "../components/Badge";
 import MaintenanceRiskChart from "../components/charts/MaintenanceRiskChart";
 import RiskBadge from "../components/charts/RiskBadge";
+import SortableHeader, { type SortState } from "../components/SortableHeader";
+import VehicleDocumentsModal from "../components/VehicleDocumentsModal";
 import { useAuth } from "../auth/AuthContext";
 
 const TYPES: VehicleType[] = ["Van", "Truck", "Mini", "Bus", "Other"];
@@ -27,12 +30,21 @@ export default function Vehicles() {
   const [error, setError] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [sort, setSort] = useState<SortState>({ sortBy: "id", sortDir: "asc" });
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [risk, setRisk] = useState<MaintenanceRisk[]>([]);
   const [riskError, setRiskError] = useState<string | null>(null);
+  const [docsVehicle, setDocsVehicle] = useState<Vehicle | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   useEffect(() => {
     if (!canManage) return;
@@ -49,13 +61,22 @@ export default function Vehicles() {
     const params = new URLSearchParams();
     if (typeFilter) params.set("type", typeFilter);
     if (statusFilter) params.set("status", statusFilter);
+    if (search) params.set("q", search);
+    params.set("sortBy", sort.sortBy);
+    params.set("sortDir", sort.sortDir);
     api
-      .get<Vehicle[]>(`/vehicles${params.toString() ? "?" + params.toString() : ""}`)
+      .get<Vehicle[]>(`/vehicles?${params.toString()}`)
       .then(setVehicles)
       .catch((err) => setError(err instanceof ApiError ? err.message : "Failed to load vehicles"));
   }
 
-  useEffect(load, [typeFilter, statusFilter]);
+  useEffect(load, [typeFilter, statusFilter, search, sort]);
+
+  function downloadPdf() {
+    downloadFile("/vehicles/export.pdf", "vehicle-registry-report.pdf").catch(() =>
+      setError("Failed to export PDF")
+    );
+  }
 
   function openCreate() {
     setEditing(null);
@@ -133,16 +154,26 @@ export default function Vehicles() {
     <>
       <div className="page-header">
         <h2>Vehicle Registry</h2>
-        {canManage && (
-          <button className="btn" onClick={openCreate}>
-            + Register Vehicle
+        <div className="actions-row">
+          <button className="btn btn-secondary" onClick={downloadPdf}>
+            Export PDF
           </button>
-        )}
+          {canManage && (
+            <button className="btn" onClick={openCreate}>
+              + Register Vehicle
+            </button>
+          )}
+        </div>
       </div>
       {error && <div className="error-banner">{error}</div>}
       {canManage && riskError && <div className="error-banner">{riskError}</div>}
       {canManage && risk.length > 0 && <MaintenanceRiskChart data={risk} />}
       <div className="filters-row">
+        <input
+          placeholder="Search reg no., name, model…"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+        />
         <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
           <option value="">All types</option>
           {TYPES.map((t) => (
@@ -167,15 +198,15 @@ export default function Vehicles() {
           <table>
             <thead>
               <tr>
-                <th>Reg No.</th>
-                <th>Name</th>
-                <th>Type</th>
+                <SortableHeader field="regNumber" label="Reg No." sort={sort} onChange={setSort} />
+                <SortableHeader field="name" label="Name" sort={sort} onChange={setSort} />
+                <SortableHeader field="type" label="Type" sort={sort} onChange={setSort} />
                 <th>Capacity (kg)</th>
-                <th>Odometer (km)</th>
-                <th>Region</th>
-                <th>Status</th>
+                <SortableHeader field="odometerKm" label="Odometer (km)" sort={sort} onChange={setSort} />
+                <SortableHeader field="region" label="Region" sort={sort} onChange={setSort} />
+                <SortableHeader field="status" label="Status" sort={sort} onChange={setSort} />
                 {canManage && <th>Maintenance Risk</th>}
-                {canManage && <th></th>}
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -191,26 +222,33 @@ export default function Vehicles() {
                     <Badge status={v.status} />
                   </td>
                   {canManage && <td>{riskFor(v.id) ? <RiskBadge label={riskFor(v.id)!.riskBucket} /> : "—"}</td>}
-                  {canManage && (
-                    <td>
-                      <div className="actions-row">
+                  <td>
+                    <div className="actions-row">
+                      <button className="btn btn-secondary btn-sm" onClick={() => setDocsVehicle(v)}>
+                        Documents
+                      </button>
+                      {canManage && (
                         <button className="btn btn-secondary btn-sm" onClick={() => openEdit(v)}>
                           Edit
                         </button>
-                        {v.status !== "Retired" && (
-                          <button className="btn btn-danger btn-sm" onClick={() => retire(v)}>
-                            Retire
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  )}
+                      )}
+                      {canManage && v.status !== "Retired" && (
+                        <button className="btn btn-danger btn-sm" onClick={() => retire(v)}>
+                          Retire
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      {docsVehicle && (
+        <VehicleDocumentsModal vehicle={docsVehicle} canManage={canManage} onClose={() => setDocsVehicle(null)} />
+      )}
 
       {showForm && (
         <div className="modal-backdrop" onClick={() => setShowForm(false)}>

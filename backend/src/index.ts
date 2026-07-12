@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import authRouter from "./routes/auth";
@@ -8,6 +9,7 @@ import maintenanceRouter from "./routes/maintenance";
 import dashboardRouter from "./routes/dashboard";
 import reportsRouter from "./routes/reports";
 import mlRouter from "./routes/ml";
+import vehicleDocumentsRouter from "./routes/vehicleDocuments";
 import { fuelLogsRouter, expensesRouter, costSummaryRouter } from "./routes/fuelExpense";
 import { errorHandler } from "./middleware/errorHandler";
 
@@ -19,6 +21,7 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 app.use("/auth", authRouter);
 app.use("/vehicles", costSummaryRouter); // /vehicles/:id/cost-summary
+app.use("/vehicles/:vehicleId/documents", vehicleDocumentsRouter);
 app.use("/vehicles", vehiclesRouter);
 app.use("/drivers", driversRouter);
 app.use("/trips", tripsRouter);
