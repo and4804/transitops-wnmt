@@ -6,6 +6,7 @@ interface AuthContextValue {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string, role: Role) => Promise<void>;
+  loginWithGoogle: (credential: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -35,13 +36,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persist(auth);
   }
 
+  async function loginWithGoogle(credential: string) {
+    const auth = await api.post<AuthResponse>("/auth/google", { credential });
+    persist(auth);
+  }
+
   function logout() {
     localStorage.removeItem("transitops_token");
     localStorage.removeItem("transitops_user");
     setUser(null);
   }
 
-  return <AuthContext.Provider value={{ user, login, signup, logout }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, login, signup, loginWithGoogle, logout }}>{children}</AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthContextValue {
