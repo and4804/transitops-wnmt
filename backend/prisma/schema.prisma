@@ -60,6 +60,7 @@ model User {
   name                  String
   email                 String    @unique
   passwordHash          String
+  googleId              String?   @unique
   role                  Role
   failedLoginAttempts   Int       @default(0)
   lockedAt              DateTime?

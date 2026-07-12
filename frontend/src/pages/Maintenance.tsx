@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { api, ApiError } from "../api/client";
 import type { Maintenance as MaintenanceRecord, Vehicle } from "../api/types";
 import Badge from "../components/Badge";

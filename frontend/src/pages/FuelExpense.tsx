@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { api, ApiError } from "../api/client";
 import { getFuelAnomalies } from "../api/ml";
 import type { CostSummary, ExpenseType, FuelAnomaly, Vehicle } from "../api/types";

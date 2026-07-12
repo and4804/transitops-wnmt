@@ -100,6 +100,21 @@ input:focus, select:focus, textarea:focus {
 .nav-link:hover { background: var(--surface-2); color: var(--text); }
 .nav-link.active { background: var(--surface-2); color: var(--text); font-weight: 600; }
 
+.logout-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  background: transparent;
+  text-align: left;
+  color: var(--danger);
+}
+.logout-btn:hover { background: var(--surface-2); }
+
 .main {
   flex: 1;
   padding: 28px 36px;
@@ -182,25 +197,123 @@ tr:hover td { background: var(--surface-2); }
   margin-bottom: 14px;
 }
 
-.auth-page {
+:root {
+  --auth-accent: #7c6cf0;
+  --auth-accent-glow: rgba(124, 108, 240, 0.55);
+}
+
+.auth-shell {
   min-height: 100vh;
+  display: flex;
+  background: var(--bg);
+}
+
+.auth-hero {
+  flex: 1.25;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 36px 40px;
+  background: radial-gradient(circle at 30% 20%, #161b2e 0%, var(--bg) 65%);
+  border-right: 1px solid var(--border);
+}
+@media (max-width: 900px) {
+  .auth-hero { display: none; }
+}
+
+.auth-hero-label {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.auth-hero-visual {
+  position: absolute;
+  inset: 0;
+}
+
+.auth-hero-tagline {
+  position: relative;
+  z-index: 1;
+  max-width: 420px;
+}
+.auth-hero-tagline h2 { margin: 0 0 10px; font-size: 34px; font-weight: 700; letter-spacing: -0.01em; }
+.auth-hero-tagline p { margin: 0; color: var(--text-dim); font-size: 14px; line-height: 1.5; }
+
+.auth-form-panel {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 40px;
 }
-.auth-card {
-  width: 380px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 32px;
+
+.auth-form-inner { width: 100%; max-width: 360px; }
+.auth-form-inner h1 { margin: 0 0 4px; font-size: 22px; }
+.auth-form-inner p.subtitle { color: var(--text-dim); font-size: 13px; margin: 0 0 24px; }
+.auth-form-inner .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.auth-form-inner .field label { font-size: 13px; color: var(--text-dim); }
+.auth-form-inner .field input { width: 100%; }
+.auth-primary-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 11px;
+  background: var(--auth-accent);
+  box-shadow: 0 0 0 1px rgba(124, 108, 240, 0.3), 0 8px 20px -8px var(--auth-accent-glow);
 }
-.auth-card h1 { margin: 0 0 4px; font-size: 22px; }
-.auth-card p.subtitle { color: var(--text-dim); font-size: 13px; margin: 0 0 20px; }
-.auth-card .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-.auth-card .field label { font-size: 13px; color: var(--text-dim); }
-.auth-card button[type="submit"] { width: 100%; margin-top: 6px; padding: 10px; }
+.auth-primary-btn:hover { filter: brightness(1.08); }
 .auth-switch { text-align: center; margin-top: 16px; font-size: 13px; color: var(--text-dim); }
+.auth-switch a, .auth-switch-link {
+  color: var(--auth-accent);
+  background: none;
+  border: none;
+  font-size: 13px;
+  padding: 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.auth-tabs {
+  display: flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 18px;
+}
+.auth-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  padding: 8px 0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.auth-tab.active { background: var(--surface); color: var(--text); }
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.auth-divider::before, .auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
 
 .actions-row { display: flex; gap: 8px; flex-wrap: wrap; }
 

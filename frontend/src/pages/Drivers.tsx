@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { api, ApiError } from "../api/client";
 import { getDriverSafetyScores } from "../api/ml";
 import type { Driver, DriverSafetyScore, DriverStatus } from "../api/types";
