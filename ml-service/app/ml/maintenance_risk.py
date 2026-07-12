@@ -99,7 +99,12 @@ def compute_maintenance_risk() -> list[dict]:
             train_rows.append(_features_row(iv["type"], days_since, km_since, rolling, iv["index"]))
             days_remaining = (end - t).total_seconds() / 86400.0
             km_remaining = total_km - km_since
-            train_labels.append(1 if (days_remaining <= SOON_DAYS or km_remaining <= SOON_KM) else 0)
+            # Only let the km criterion decide "soon" when the interval's total mileage
+            # actually clears the threshold — otherwise km_remaining <= SOON_KM is true
+            # from day one of every interval (most intervals here never hit 3000km total),
+            # which mislabels nearly the whole dataset as "high risk" and saturates the model.
+            km_soon = total_km > SOON_KM and km_remaining <= SOON_KM
+            train_labels.append(1 if (days_remaining <= SOON_DAYS or km_soon) else 0)
             t = t + pd.Timedelta(days=SAMPLE_STEP_DAYS)
         _ = total_days  # kept for readability of intent, not otherwise used
 
