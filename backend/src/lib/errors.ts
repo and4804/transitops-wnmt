@@ -16,3 +16,4 @@ export const notFound = (message: string) => new ApiError(404, "Not Found", mess
 export const conflict = (message: string) => new ApiError(409, "Conflict", message);
 export const unprocessable = (message: string) => new ApiError(422, "Unprocessable Entity", message);
 export const locked = (message: string) => new ApiError(423, "Locked", message);
+export const serviceUnavailable = (message: string) => new ApiError(503, "Service Unavailable", message);

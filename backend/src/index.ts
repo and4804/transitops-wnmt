@@ -7,6 +7,7 @@ import tripsRouter from "./routes/trips";
 import maintenanceRouter from "./routes/maintenance";
 import dashboardRouter from "./routes/dashboard";
 import reportsRouter from "./routes/reports";
+import mlRouter from "./routes/ml";
 import { fuelLogsRouter, expensesRouter, costSummaryRouter } from "./routes/fuelExpense";
 import { errorHandler } from "./middleware/errorHandler";
 
@@ -24,6 +25,7 @@ app.use("/trips", tripsRouter);
 app.use("/maintenance", maintenanceRouter);
 app.use("/dashboard", dashboardRouter);
 app.use("/reports", reportsRouter);
+app.use("/ml", mlRouter);
 app.use("/fuel-logs", fuelLogsRouter);
 app.use("/expenses", expensesRouter);
 

@@ -12,5 +12,17 @@ services:
     volumes:
       - transitops_pgdata:/var/lib/postgresql/data
 
+  ml-service:
+    build: ./ml-service
+    container_name: transitops-ml
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg2://transitops:transitops@postgres:5432/transitops
+      PORT: "8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+
 volumes:
   transitops_pgdata:

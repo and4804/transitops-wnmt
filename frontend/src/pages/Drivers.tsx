@@ -1,7 +1,10 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
-import type { Driver, DriverStatus } from "../api/types";
+import { getDriverSafetyScores } from "../api/ml";
+import type { Driver, DriverSafetyScore, DriverStatus } from "../api/types";
 import Badge from "../components/Badge";
+import RiskBadge from "../components/charts/RiskBadge";
+import SafetyScoreChart from "../components/charts/SafetyScoreChart";
 import { useAuth } from "../auth/AuthContext";
 
 const STATUSES: DriverStatus[] = ["Available", "OnTrip", "Suspended"];
@@ -31,6 +34,19 @@ export default function Drivers() {
   const [editing, setEditing] = useState<Driver | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
+  const [safetyScores, setSafetyScores] = useState<DriverSafetyScore[]>([]);
+  const [safetyError, setSafetyError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!canManage) return;
+    getDriverSafetyScores()
+      .then(setSafetyScores)
+      .catch(() => setSafetyError("ML insights unavailable — analytics service offline"));
+  }, [canManage]);
+
+  function safetyFor(driverId: number) {
+    return safetyScores.find((s) => s.driverId === driverId);
+  }
 
   function load() {
     const params = statusFilter ? `?status=${statusFilter}` : "";
@@ -105,6 +121,8 @@ export default function Drivers() {
         )}
       </div>
       {error && <div className="error-banner">{error}</div>}
+      {canManage && safetyError && <div className="error-banner">{safetyError}</div>}
+      {canManage && safetyScores.length > 0 && <SafetyScoreChart data={safetyScores} />}
       <div className="filters-row">
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
@@ -133,7 +151,9 @@ export default function Drivers() {
               </tr>
             </thead>
             <tbody>
-              {drivers.map((d) => (
+              {drivers.map((d) => {
+                const computed = safetyFor(d.id);
+                return (
                 <tr key={d.id}>
                   <td>{d.name}</td>
                   <td>{d.licenseNumber}</td>
@@ -143,7 +163,16 @@ export default function Drivers() {
                     {isExpiringSoon(d.licenseExpiry) ? " ⚠" : ""}
                   </td>
                   <td>{d.contactNumber}</td>
-                  <td>{d.safetyScore}</td>
+                  <td>
+                    {computed ? (
+                      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        {computed.safetyScore}
+                        <RiskBadge label={computed.band} />
+                      </span>
+                    ) : (
+                      d.safetyScore
+                    )}
+                  </td>
                   <td>
                     <Badge status={d.status} />
                   </td>
@@ -155,7 +184,8 @@ export default function Drivers() {
                     </td>
                   )}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}

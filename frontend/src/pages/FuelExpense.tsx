@@ -1,13 +1,27 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
-import type { CostSummary, ExpenseType, Vehicle } from "../api/types";
+import { getFuelAnomalies } from "../api/ml";
+import type { CostSummary, ExpenseType, FuelAnomaly, Vehicle } from "../api/types";
+import FuelAnomalyChart from "../components/charts/FuelAnomalyChart";
+import { useAuth } from "../auth/AuthContext";
 
 const EXPENSE_TYPES: ExpenseType[] = ["Toll", "Parking", "Fine", "Insurance", "Other"];
 
 export default function FuelExpense() {
+  const { user } = useAuth();
+  const canSeeAnomalies = user?.role === "FleetManager" || user?.role === "FinancialAnalyst";
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [anomalies, setAnomalies] = useState<FuelAnomaly[]>([]);
+  const [anomalyError, setAnomalyError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!canSeeAnomalies) return;
+    getFuelAnomalies()
+      .then(setAnomalies)
+      .catch(() => setAnomalyError("ML insights unavailable — analytics service offline"));
+  }, [canSeeAnomalies]);
 
   const [fuelForm, setFuelForm] = useState({ vehicleId: "", liters: "", cost: "", date: "" });
   const [expenseForm, setExpenseForm] = useState({
@@ -213,6 +227,13 @@ export default function FuelExpense() {
           </div>
         )}
       </div>
+
+      {canSeeAnomalies && (
+        <>
+          {anomalyError && <div className="error-banner">{anomalyError}</div>}
+          <FuelAnomalyChart data={anomalies} />
+        </>
+      )}
     </>
   );
 }

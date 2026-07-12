@@ -10,12 +10,18 @@ reports, built against the contract in `Contracts/`.
   service on port `8080`, one Postgres database.
 - **Frontend** (`frontend/`): React + TypeScript + Vite, single app on port
   `5173`, talks directly to the backend.
+- **ML service** (`ml-service/`): Python + FastAPI + scikit-learn, port
+  `8000`. Reads the same Postgres database read-only and serves 5 ML-powered
+  insights (predictive maintenance risk, driver safety scoring, fuel anomaly
+  detection, cost/ROI forecasting, fleet utilization forecasting) that the
+  backend proxies at `/ml/*` and the frontend renders as charts on the
+  Vehicles, Drivers, Fuel & Expense, Reports, and Dashboard pages.
 - **Database**: Postgres via Docker (`docker-compose.yml` at repo root).
 
 ## Run it
 
 ```bash
-# 1. Start Postgres
+# 1. Start Postgres (+ ml-service, if using Docker for it)
 docker compose up -d
 
 # 2. Backend
@@ -29,9 +35,22 @@ npm run dev              # listens on :8080
 cd frontend
 npm install
 npm run dev               # listens on :5173
+
+# 4. ML service (separate terminal, if not run via docker compose)
+cd ml-service
+pip install -r requirements.txt
+cp .env.example .env      # point DATABASE_URL at localhost if running outside Docker
+uvicorn app.main:app --reload --port 8000
+
+# 5. Generate synthetic historical data once, so the ML features have signal
+#    (the demo seed's 3 vehicles/2 drivers/1 trip are too thin for any of them)
+python ml-service/scripts/generate_synthetic_data.py
 ```
 
-Open http://localhost:5173.
+Open http://localhost:5173. The backend needs `ML_SERVICE_URL` (defaults to
+`http://localhost:8000`) — see `backend/.env.example`. If `ml-service` is
+down, `/ml/*` routes return `503` and the frontend pages fall back to a
+small inline notice instead of breaking.
 
 ## Demo login
 
@@ -69,3 +88,24 @@ hide a button).
   the password.
 - Every error response follows the shared `StandardError` shape
   (`timestamp`, `status`, `error`, `message`, `path`).
+
+## ML features
+
+Each of the 5 endpoints in `ml-service/` derives its features purely from the
+existing Vehicle/Driver/Trip/Maintenance/FuelLog/Expense tables — no new
+tables were added. Models retrain automatically whenever the underlying data
+changes (fingerprinted via row counts), and eagerly warm up on service
+startup. See `ml-service/app/ml/*.py` for the concrete algorithm per feature,
+and `ml-service/scripts/generate_synthetic_data.py` for how the historical
+dataset (and its injected anomalies/archetypes/overdue vehicles) is built.
+
+| Feature | Algorithm | Endpoint | Persona / page |
+|---|---|---|---|
+| Predictive Maintenance Risk | Logistic Regression | `GET /ml/maintenance-risk` | Fleet Manager — Vehicles |
+| Driver Safety Score | Ridge Regression (weak-labeled) | `GET /ml/driver-safety-scores` | Safety Officer — Drivers |
+| Fuel Anomaly Detection | IsolationForest (+ z-score fallback) | `GET /ml/fuel-anomalies` | Financial Analyst — Fuel & Expense |
+| Cost/ROI Trend Forecast | Linear Regression | `GET /ml/cost-roi-forecast` | Financial Analyst — Reports |
+| Fleet Utilization Forecast | Linear Regression | `GET /ml/utilization-forecast` | Fleet Manager — Dashboard |
+
+`POST http://localhost:8000/admin/retrain` force-retrains all 5 models
+(useful right after re-running the generator).

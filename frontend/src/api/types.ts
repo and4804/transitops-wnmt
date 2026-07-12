@@ -110,3 +110,79 @@ export interface CostSummary {
   totalExpenseCost: number;
   totalCost: number;
 }
+
+export interface MaintenanceRisk {
+  vehicleId: number;
+  regNumber: string;
+  riskScore: number;
+  riskBucket: "Low" | "Medium" | "High";
+  kmSinceLastService: number;
+  daysSinceLastService: number;
+  lastMaintenanceAt: string | null;
+}
+
+export interface DriverSafetyScore {
+  driverId: number;
+  name: string;
+  safetyScore: number;
+  band: "Excellent" | "Good" | "Fair" | "At Risk";
+  completionRate: number;
+  cancellationRate: number;
+  avgCargoUtilization: number;
+  licenseExpiryDays: number;
+  routeDeviationRatio: number;
+}
+
+export interface FuelAnomaly {
+  fuelLogId: number;
+  vehicleId: number;
+  regNumber: string;
+  date: string;
+  liters: number;
+  cost: number;
+  litersPerKm: number | null;
+  costPerLiter: number | null;
+  anomalyScore: number;
+  isAnomaly: boolean;
+  reason: string;
+}
+
+export interface CostRoiHistoryPoint {
+  month: string;
+  cost: number;
+  revenue: number | null;
+  roiPct: number | null;
+}
+
+export interface CostRoiForecastPoint {
+  month: string;
+  predictedCost: number;
+  costLower: number;
+  costUpper: number;
+  predictedRoiPct: number | null;
+  roiLower: number | null;
+  roiUpper: number | null;
+}
+
+export interface CostRoiForecast {
+  scope: string;
+  history: CostRoiHistoryPoint[];
+  forecast: CostRoiForecastPoint | null;
+}
+
+export interface UtilizationHistoryPoint {
+  date: string;
+  utilizationPct: number;
+}
+
+export interface UtilizationForecastPoint {
+  date: string;
+  predictedUtilizationPct: number;
+  lower: number;
+  upper: number;
+}
+
+export interface UtilizationForecast {
+  history: UtilizationHistoryPoint[];
+  forecast: UtilizationForecastPoint[];
+}

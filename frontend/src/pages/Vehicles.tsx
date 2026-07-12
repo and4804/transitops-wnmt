@@ -1,7 +1,10 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
-import type { Vehicle, VehicleStatus, VehicleType } from "../api/types";
+import { getMaintenanceRisk } from "../api/ml";
+import type { MaintenanceRisk, Vehicle, VehicleStatus, VehicleType } from "../api/types";
 import Badge from "../components/Badge";
+import MaintenanceRiskChart from "../components/charts/MaintenanceRiskChart";
+import RiskBadge from "../components/charts/RiskBadge";
 import { useAuth } from "../auth/AuthContext";
 
 const TYPES: VehicleType[] = ["Van", "Truck", "Mini", "Bus", "Other"];
@@ -28,6 +31,19 @@ export default function Vehicles() {
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
+  const [risk, setRisk] = useState<MaintenanceRisk[]>([]);
+  const [riskError, setRiskError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!canManage) return;
+    getMaintenanceRisk()
+      .then(setRisk)
+      .catch(() => setRiskError("ML insights unavailable — analytics service offline"));
+  }, [canManage]);
+
+  function riskFor(vehicleId: number) {
+    return risk.find((r) => r.vehicleId === vehicleId);
+  }
 
   function load() {
     const params = new URLSearchParams();
@@ -124,6 +140,8 @@ export default function Vehicles() {
         )}
       </div>
       {error && <div className="error-banner">{error}</div>}
+      {canManage && riskError && <div className="error-banner">{riskError}</div>}
+      {canManage && risk.length > 0 && <MaintenanceRiskChart data={risk} />}
       <div className="filters-row">
         <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
           <option value="">All types</option>
@@ -156,6 +174,7 @@ export default function Vehicles() {
                 <th>Odometer (km)</th>
                 <th>Region</th>
                 <th>Status</th>
+                {canManage && <th>Maintenance Risk</th>}
                 {canManage && <th></th>}
               </tr>
             </thead>
@@ -171,6 +190,7 @@ export default function Vehicles() {
                   <td>
                     <Badge status={v.status} />
                   </td>
+                  {canManage && <td>{riskFor(v.id) ? <RiskBadge label={riskFor(v.id)!.riskBucket} /> : "—"}</td>}
                   {canManage && (
                     <td>
                       <div className="actions-row">
