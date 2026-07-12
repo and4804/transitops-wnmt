@@ -1,0 +1,61 @@
+# Example Nginx site for a subdomain under nrg.it.com, proxied through
+# Cloudflare (orange cloud). TLS between Cloudflare and this origin uses a
+# Cloudflare Origin CA certificate (not Certbot/Let's Encrypt) — Cloudflare
+# terminates public TLS at its edge.
+#
+# One-time setup on the instance:
+#
+#   1. Cloudflare dashboard > SSL/TLS > Origin Server > Create Certificate
+#      - Hostnames: transitops.nrg.it.com
+#      - Key format: PEM
+#      Save the certificate as origin.pem and the private key as origin.key.
+#
+#   2. Copy both files to the instance (never commit them to git):
+#        scp -i wnmr.pem origin.pem origin.key \
+#          ubuntu@<EC2_HOST>:~
+#        ssh -i wnmr.pem ubuntu@<EC2_HOST>
+#          sudo mv ~/origin.pem /etc/nginx/ssl/cloudflare-origin.pem
+#          sudo mv ~/origin.key /etc/nginx/ssl/cloudflare-origin.key
+#          sudo chmod 600 /etc/nginx/ssl/cloudflare-origin.key
+#
+#   3. Cloudflare dashboard > SSL/TLS > Overview > set mode to "Full (strict)"
+#
+#   4. Install this site:
+#        scp -i wnmr.pem deploy/nginx-transitops.conf.example ubuntu@<EC2_HOST>:~
+#        ssh -i wnmr.pem ubuntu@<EC2_HOST>
+#          sudo cp ~/nginx-transitops.conf.example /etc/nginx/sites-available/transitops
+#          sudo ln -sf /etc/nginx/sites-available/transitops /etc/nginx/sites-enabled/
+#          sudo nginx -t && sudo systemctl reload nginx
+#
+# setup-ec2.sh already generates /etc/nginx/conf.d/cloudflare-realip.conf so
+# $remote_addr below reflects the real visitor IP, not Cloudflare's.
+#
+# Adjust proxy_pass when the app listens on a different port.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name transitops.nrg.it.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name transitops.nrg.it.com;
+
+    ssl_certificate     /etc/nginx/ssl/cloudflare-origin.pem;
+    ssl_certificate_key /etc/nginx/ssl/cloudflare-origin.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}

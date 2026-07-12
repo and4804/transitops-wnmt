@@ -1,52 +1,262 @@
-# Deployment
+# TransitOps — CI/CD & EC2 setup
 
-CI/CD is handled by [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml):
-on every push to `main`, GitHub Actions builds the app (if `package.json`
-exists), rsyncs the repo to the EC2 instance, and restarts the
-`transitops` systemd service.
+Building-block deploy: GitHub Actions rsyncs whatever is on `main` to an
+Ubuntu EC2 box and restarts a user-level systemd unit. App packages can land
+later; until then deploys still succeed (service may be idle).
 
-## One-time EC2 setup
+**Target host (example):** `ubuntu@ec2-3-109-155-36.ap-south-1.compute.amazonaws.com`  
+**Suggested public URL:** `https://transitops.nrg.it.com`  
+(keep `nrg.it.com` for the portfolio; use a **subdomain** for this app)  
+**DNS/TLS:** `nrg.it.com` is on Cloudflare, so `transitops.nrg.it.com` is
+**proxied** through Cloudflare (orange cloud) with a Cloudflare Origin CA
+cert on the instance — not Certbot/Let's Encrypt. See §4.
 
-1. Launch a Debian EC2 instance and note its public IP/DNS. Open port 22
-   (SSH) and whatever port your app will serve on (e.g. 3000/443) in its
-   security group.
-2. Generate a dedicated deploy key pair (don't reuse your personal key):
-   ```
-   ssh-keygen -t ed25519 -f transitops_deploy_key -C "transitops-ci"
-   ```
-3. Add the public key to the instance's `admin` user:
-   ```
-   ssh-copy-id -i transitops_deploy_key.pub admin@<EC2_HOST>
-   ```
-4. Copy the bootstrap files and run the setup script on the instance:
-   ```
-   scp deploy/setup-ec2.sh deploy/transitops.service admin@<EC2_HOST>:~
-   ssh admin@<EC2_HOST> 'chmod +x setup-ec2.sh && ./setup-ec2.sh'
-   ```
-   This installs Node.js, creates `~/transitops`, and registers a
-   user-level systemd service (`systemctl --user`) so CI can restart the
-   app without needing sudo.
-5. In the GitHub repo, go to **Settings > Secrets and variables >
-   Actions** and add:
-   - `EC2_HOST` — the instance's public IP or DNS name
-   - `EC2_SSH_KEY` — contents of the *private* key file
-     (`transitops_deploy_key`) generated in step 2
+---
 
-## After that
+## 0. What stays local vs what goes to GitHub
 
-Every push to `main` will:
-1. Install deps / build / test (skipped if no `package.json` yet)
-2. rsync the repo to `/home/admin/transitops` on the instance
-3. Run `npm ci --omit=dev` on the instance (if `package.json` exists)
-4. `systemctl --user restart transitops`
+| Push to `main` now | Keep local until ready |
+| --- | --- |
+| `.github/workflows/deploy.yml` | Full `frontend/`, `ml-service/` (until you choose) |
+| `deploy/*` (this folder) | Secrets, `.env`, `*.pem` (**never** commit) |
+| Contracts / README / docker-compose as needed | Production DB passwords |
 
-Until real app code with a `package.json` + `npm start` exists, step 4
-will keep failing to start — that's expected. Once the app is added,
-deploys should just work.
+Do **not** commit `wnmr.pem`, `origin.pem`/`origin.key` (Cloudflare Origin
+CA cert), or any other private key.
+
+---
+
+## 1. AWS — security group & instance
+
+On the EC2 instance security group, allow inbound:
+
+| Port | Source | Why |
+| --- | --- | --- |
+| 22 | Your IP (and optionally GitHub Actions — see note) | SSH |
+| 80 | `0.0.0.0/0` (or Cloudflare IPs only, see below) | HTTP → redirects to HTTPS |
+| 443 | `0.0.0.0/0` (or Cloudflare IPs only, see below) | HTTPS |
+
+Do **not** open Postgres `5432` or app `8080` to the world; Nginx proxies
+internally.
+
+**Traffic is proxied through Cloudflare** (orange cloud), so 80/443 only
+ever need to accept connections from Cloudflare's edge, not the whole
+internet. Optional hardening: restrict the security group's 80/443 rules
+to [Cloudflare's published IP ranges](https://www.cloudflare.com/ips/)
+instead of `0.0.0.0/0` — this makes it impossible to bypass Cloudflare by
+hitting the EC2 IP directly. Skip this if you'd rather not maintain the
+range list; `0.0.0.0/0` is fine since the origin cert still enforces TLS.
+
+**SSH note:** GitHub Actions runners use changing IPs. Either:
+
+- temporarily allow `0.0.0.0/0` on port 22 (simplest for a lab), or
+- restrict SSH to your IP for admin and use a deploy key + broader 22 only
+  while iterating, or
+- later move to SSM / a fixed bastion.
+
+Confirm you can log in:
+
+```bash
+ssh -i wnmr.pem ubuntu@ec2-3-109-155-36.ap-south-1.compute.amazonaws.com
+```
+
+---
+
+## 2. GitHub Actions secrets (use your existing `wnmr.pem`)
+
+You already have the instance keypair (`wnmr.pem`). Use that for Actions —
+no second key needed. Confirm SSH works first:
+
+```bash
+ssh -i wnmr.pem ubuntu@ec2-3-109-155-36.ap-south-1.compute.amazonaws.com
+```
+
+Repo → **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Secret | Value |
+| --- | --- |
+| `EC2_HOST` | `ec2-3-109-155-36.ap-south-1.compute.amazonaws.com` (or the Elastic IP if you attach one) |
+| `EC2_SSH_KEY` | Full contents of `wnmr.pem`, including the `-----BEGIN … KEY-----` / `-----END … KEY-----` lines |
+
+On Windows you can copy the whole file in Notepad, or:
+
+```powershell
+Get-Content .\wnmr.pem -Raw | Set-Clipboard
+```
+
+Paste into the `EC2_SSH_KEY` secret value field.
+
+**Do not** commit `wnmr.pem` to the repo — secrets only.
+
+Optional later (when backend goes live):
+
+| Secret | Value |
+| --- | --- |
+| `DATABASE_URL` | Prefer writing `.env` on the box once by hand instead of CI |
+
+---
+
+## 3. One-time software on the EC2 box
+
+From your laptop (paths relative to this repo):
+
+```bash
+scp -i wnmr.pem deploy/setup-ec2.sh deploy/transitops.service \
+  ubuntu@ec2-3-109-155-36.ap-south-1.compute.amazonaws.com:~
+
+ssh -i wnmr.pem ubuntu@ec2-3-109-155-36.ap-south-1.compute.amazonaws.com \
+  'chmod +x setup-ec2.sh && ./setup-ec2.sh'
+```
+
+Then **log out and SSH back in** once so the `docker` group applies.
+
+What the script installs:
+
+- Node.js 20  
+- rsync  
+- nginx  
+- Docker + Compose plugin  
+- `~/transitops`  
+- `/etc/nginx/conf.d/cloudflare-realip.conf` (current Cloudflare IP ranges,
+  so Nginx sees real visitor IPs instead of Cloudflare's)  
+- `/etc/nginx/ssl/` (empty — you copy the Cloudflare Origin CA cert here, see §4)  
+- user systemd unit `transitops` + lingering  
+
+Elastic IP (recommended): allocate one in AWS and associate it with the
+instance so DNS does not break on stop/start.
+
+---
+
+## 4. Subdomain for `nrg.it.com` (Cloudflare-proxied)
+
+Keep the portfolio on the apex (`nrg.it.com` / `www`). Point a **subdomain**
+at this EC2 instance, e.g. `transitops.nrg.it.com`, proxied through
+Cloudflare (orange cloud). Since Cloudflare terminates public TLS at its
+edge, the origin doesn't use Certbot/Let's Encrypt — it uses a free
+**Cloudflare Origin CA** certificate for the Cloudflare↔origin leg.
+
+### 4a. DNS record (Cloudflare dashboard)
+
+Cloudflare → your zone → **DNS** → Add record:
+
+| Type | Name | Content | Proxy status |
+| --- | --- | --- | --- |
+| A | `transitops` | `<EC2 Elastic IP or public IPv4>` | **Proxied** (orange cloud) |
+
+Do **not** change the existing apex/`www` records — leave the portfolio
+alone.
+
+### 4b. SSL/TLS mode (Cloudflare dashboard)
+
+Cloudflare → your zone → **SSL/TLS → Overview** → set encryption mode to
+**Full (strict)**. This requires the origin to present a valid cert (the
+Origin CA cert from the next step) — "Flexible" would talk plain HTTP to
+the origin and is not what we want here.
+
+Optional but recommended: **SSL/TLS → Edge Certificates** → turn on
+**Always Use HTTPS**.
+
+### 4c. Origin CA certificate (Cloudflare dashboard)
+
+Cloudflare → your zone → **SSL/TLS → Origin Server** → **Create Certificate**:
+- Hostnames: `transitops.nrg.it.com`
+- Key format: PEM
+- Validity: 15 years (default) is fine
+
+Save the two outputs locally as `origin.pem` (certificate) and `origin.key`
+(private key) — **never commit these to git**. Copy them to the instance:
+
+```bash
+scp -i wnmr.pem origin.pem origin.key \
+  ubuntu@ec2-3-109-155-36.ap-south-1.compute.amazonaws.com:~
+
+ssh -i wnmr.pem ubuntu@ec2-3-109-155-36.ap-south-1.compute.amazonaws.com
+  sudo mv ~/origin.pem /etc/nginx/ssl/cloudflare-origin.pem
+  sudo mv ~/origin.key /etc/nginx/ssl/cloudflare-origin.key
+  sudo chmod 600 /etc/nginx/ssl/cloudflare-origin.key
+```
+
+(`/etc/nginx/ssl/` was already created by `setup-ec2.sh`.)
+
+### 4d. Nginx site on the instance
+
+```bash
+# from laptop
+scp -i wnmr.pem deploy/nginx-transitops.conf.example \
+  ubuntu@ec2-3-109-155-36.ap-south-1.compute.amazonaws.com:~
+
+# on the instance
+sudo cp ~/nginx-transitops.conf.example /etc/nginx/sites-available/transitops
+sudo ln -sf /etc/nginx/sites-available/transitops /etc/nginx/sites-enabled/
+# optional: remove default site if it conflicts
+# sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+The example config terminates TLS with the Cloudflare Origin CA cert,
+redirects plain HTTP → HTTPS, and proxies to `http://127.0.0.1:8080`
+(backend). `setup-ec2.sh` also drops
+`/etc/nginx/conf.d/cloudflare-realip.conf`, populated with Cloudflare's
+current IP ranges, so `$remote_addr` in Nginx (and `X-Real-IP` passed
+upstream) reflects the actual visitor, not Cloudflare's edge IP.
+
+Change `proxy_pass` in the example config when the frontend is served
+separately or you add a root process.
+
+**Portfolio coexistence:** as long as DNS for `nrg.it.com` still points at
+whatever hosts the portfolio, and only `transitops.nrg.it.com` is proxied
+to this EC2 instance, the two sites do not interfere.
+
+**Cert rotation note:** Cloudflare Origin CA certs are long-lived (default
+15 years) and not renewed by Certbot/cron — no renewal automation needed
+unless you regenerate it manually in the dashboard.
+
+---
+
+## 5. How CI behaves while the app is incomplete
+
+On every push to `main` (or manual **Actions → Deploy to EC2 → Run workflow**):
+
+1. Checkout  
+2. Root `npm ci` / build / test — **skipped** if no root `package.json`  
+3. `rsync` → `/home/ubuntu/transitops` (excludes `.git`, `.env`, `node_modules`, pems)  
+4. Restart `systemctl --user transitops` (tolerates failure until `npm start` exists)
+
+Gradual rollout idea:
+
+1. Deploy plumbing only (this folder + workflow) — verify Actions green + files appear under `~/transitops`  
+2. Add `backend/` when ready; either a root `package.json` that starts the API, or extend the workflow/systemd unit for `backend/`  
+3. Add Postgres via `docker compose` on the box  
+4. Add frontend build + Nginx static / reverse proxy rules  
+5. Add `ml-service` later  
+
+---
+
+## 6. Checklist (do in order)
+
+- [ ] Security group: 22 / 80 / 443  
+- [ ] Elastic IP attached (optional but strongly recommended)  
+- [ ] Confirm `ssh -i wnmr.pem ubuntu@…` works  
+- [ ] GitHub secrets `EC2_HOST` + `EC2_SSH_KEY` (= full `wnmr.pem`)  
+- [ ] Run `setup-ec2.sh` on the instance; re-login for Docker group  
+- [ ] Cloudflare DNS `A` record `transitops` → Elastic IP, **Proxied** (orange cloud)  
+- [ ] Cloudflare SSL/TLS mode set to **Full (strict)**  
+- [ ] Cloudflare Origin CA cert generated + copied to `/etc/nginx/ssl/` on the instance  
+- [ ] Nginx site installed (`nginx -t` passes, reloaded)  
+- [ ] Push only deploy scaffolding to `main`; confirm Actions succeeds  
+- [ ] Later: app packages, `.env` on the server, compose up Postgres  
+
+---
 
 ## Manual redeploy / rollback
 
-Trigger the workflow manually from the Actions tab ("Run workflow") to
-redeploy the current `main` without a new push. To roll back, revert the
-offending commit on `main` and push — the workflow will redeploy the
-reverted state.
+- Redeploy current `main`: Actions → **Run workflow**  
+- Rollback: revert the bad commit on `main` and push  
+
+## Local systemd helpers (on EC2)
+
+```bash
+systemctl --user status transitops
+systemctl --user restart transitops
+journalctl --user -u transitops -f
+```

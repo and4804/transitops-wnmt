@@ -6,8 +6,9 @@ on:
   workflow_dispatch: {}
 
 env:
-  DEPLOY_USER: admin
-  DEPLOY_PATH: /home/admin/transitops
+  # Matches the default Ubuntu EC2 AMI user. Override via repo variable if needed.
+  DEPLOY_USER: ubuntu
+  DEPLOY_PATH: /home/ubuntu/transitops
 
 jobs:
   build-and-deploy:
@@ -16,6 +17,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Root package.json is optional while the monorepo is built out gradually.
+      # When backend/frontend land, prefer adding a root workspace package.json
+      # or extend this job with per-package build steps.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -52,7 +56,10 @@ jobs:
             --exclude '.git' \
             --exclude '.github' \
             --exclude 'node_modules' \
+            --exclude '**/node_modules' \
             --exclude '.env' \
+            --exclude '**/.env' \
+            --exclude '*.pem' \
             ./ "${{ env.DEPLOY_USER }}@${{ secrets.EC2_HOST }}:${{ env.DEPLOY_PATH }}/"
 
       - name: Install production deps & restart service
@@ -63,6 +70,6 @@ jobs:
             if [ -f package.json ]; then
               npm ci --omit=dev
             fi
-            systemctl --user restart transitops
-            systemctl --user status transitops --no-pager -l | head -20
+            systemctl --user restart transitops || true
+            systemctl --user status transitops --no-pager -l | head -20 || true
           '
