@@ -115,3 +115,6 @@ dataset (and its injected anomalies/archetypes/overdue vehicles) is built.
 
 `POST http://localhost:8000/admin/retrain` force-retrains all 5 models
 (useful right after re-running the generator).
+
+
+<!-- Security scan triggered at 2026-09-05 07:27:46 -->
